@@ -26,14 +26,15 @@ opkg install iptables-zz-legacy ip6tables-zz-legacy firewall coreutils-base64 dn
 ln -sf /usr/sbin/iptables-legacy  /usr/sbin/iptables
 ln -sf /usr/sbin/ip6tables-legacy /usr/sbin/ip6tables
 
-# Android AID groups: root needs these or the kernel blocks AF_INET sockets
-grep -q '^aid_inet:'      /etc/group || echo 'aid_inet:x:3003:root'      >> /etc/group
-grep -q '^aid_net_raw:'   /etc/group || echo 'aid_net_raw:x:3004:root'   >> /etc/group
-grep -q '^aid_net_admin:' /etc/group || echo 'aid_net_admin:x:3005:root' >> /etc/group
+# Android AID groups: root and network daemons need these or the kernel blocks AF_INET sockets
+grep -q '^aid_inet:'      /etc/group || echo 'aid_inet:x:3003:root,dnsmasq'      >> /etc/group
+grep -q '^aid_net_raw:'   /etc/group || echo 'aid_net_raw:x:3004:root,dnsmasq'   >> /etc/group
+grep -q '^aid_net_admin:' /etc/group || echo 'aid_net_admin:x:3005:root,dnsmasq' >> /etc/group
 
-# Confirm root's group membership via usermod, then drop shadow-utils
+# Confirm group membership via usermod, then drop shadow-utils
 opkg install shadow-utils
 usermod -a -G aid_inet,aid_net_raw root || true
+usermod -a -G aid_inet,aid_net_raw dnsmasq || true
 opkg remove --force-depends shadow-utils
 
 # Upstream over eth0 (Droidspaces NAT); VirtualAP adds vaplan0 LAN at start time
@@ -140,6 +141,11 @@ FWEOF
 
 echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/30-virtualap.conf
 echo "Droidspaces/VirtualAP ImmortalWrt image built on $(date)" > /etc/droidspaces
+
+# VirtualAP auto-detection compatibility:
+# VirtualAP's ds_is_openwrt checks /etc/os-release with `^ID=['"]?openwrt`.
+# Set ID="openwrt" so VirtualAP recognizes this container and provisions vaplan0 LAN + NAT.
+sed -i 's/^ID=.*/ID="openwrt"/' /etc/os-release
 
 # Trim opkg lists; keep /tmp (resolv.conf symlink + tmpfs at runtime)
 rm -rf /var/opkg-lists/* 2>/dev/null || true
